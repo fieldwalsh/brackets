@@ -430,7 +430,6 @@ define(function (require, exports, module) {
      */
     MultiRangeInlineEditor.prototype._handleChange = function () {
         this._updateRelatedContainer();
-        this._ensureCursorVisible();
     };
 
     /**
