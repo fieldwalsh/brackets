@@ -611,6 +611,10 @@ a, img {
     
     .CodeMirror-scroll {
         background-color: transparent;
+        
+        .CodeMirror-linenumbers {
+            background-color: @inline-background-color-1;
+        }
     }
 }
 
@@ -618,16 +622,13 @@ a, img {
 .related-container {
     @top-margin: 12px;
     
-    /*width: 0;*/
+    float: right;
+    position: relative;
+    min-height: 100%;
     font-family: @fontstack-sans-serif;
-    position: fixed;
     width: 250px;
     overflow: hidden;
-    /*-webkit-transition: width 0.15s ease-out;*/
     background: @inline-background-color-2;
-    
-    /* CodeMirror sets widgets that overlap the gutter to have a z-index of 5. We need to be in front of this. */
-    z-index: 6;
     
     .selection {
         width: 100%;

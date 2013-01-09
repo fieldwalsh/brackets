@@ -175,7 +175,7 @@ define(function (require, exports, module) {
         self.setSelectedIndex(0);
         
         // attach to main container
-        this.$htmlContent.append(this.$editorsDiv).append(this.$relatedContainer);
+        this.$htmlContent.append(this.$relatedContainer).append(this.$editorsDiv);
         
         // initialize position based on the main #editor-holder
         window.setTimeout(this._updateRelatedContainer, 0);
@@ -376,33 +376,9 @@ define(function (require, exports, module) {
      * Set the size, position, and clip rect of the range list.
      */
     MultiRangeInlineEditor.prototype._updateRelatedContainer = function () {
-        var borderThickness = (this.$htmlContent.outerHeight() - this.$htmlContent.innerHeight()) / 2;
-        this.$relatedContainer.css("top", this.$htmlContent.offset().top + borderThickness);
-        this.$relatedContainer.height(this.$htmlContent.height());
-        
-        // Because we're using position: fixed, we need to explicitly clip the range list if it crosses
-        // out of the top or bottom of the scroller area.
+        // Constrain relatedContainer width to half of the scroller width.
         var hostScroller = this.hostEditor.getScrollerElement(),
-            rcTop = this.$relatedContainer.offset().top,
-            rcHeight = this.$relatedContainer.outerHeight(),
-            rcBottom = rcTop + rcHeight,
-            scrollerOffset = $(hostScroller).offset(),
-            scrollerTop = scrollerOffset.top,
-            // To calculate the actual visible height of the hostScroller, we have to take the margin into
-            // account. This is because CodeMirror sets a negative margin on the scroller as a hack to
-            // push the "real" scrollbar offscreen.
-            scrollerBottom = scrollerTop + $(hostScroller).outerHeight(true),
-            scrollerLeft = scrollerOffset.left,
-            rightOffset = $(window.document.body).outerWidth() - (scrollerLeft + hostScroller.clientWidth);
-        if (rcTop < scrollerTop || rcBottom > scrollerBottom) {
-            this.$relatedContainer.css("clip", "rect(" + Math.max(scrollerTop - rcTop, 0) + "px, auto, " +
-                                       (rcHeight - Math.max(rcBottom - scrollerBottom, 0)) + "px, auto)");
-        } else {
-            this.$relatedContainer.css("clip", "");
-        }
-        
-        // Constrain relatedContainer width to half of the scroller width
-        var relatedContainerWidth = this.$relatedContainer.width();
+            relatedContainerWidth = this.$relatedContainer.width();
         if (this._relatedContainerInserted) {
             if (this._relatedContainerDefaultWidth === undefined) {
                 this._relatedContainerDefaultWidth = relatedContainerWidth;
@@ -412,16 +388,6 @@ define(function (require, exports, module) {
             relatedContainerWidth = Math.min(this._relatedContainerDefaultWidth, halfWidth);
             this.$relatedContainer.width(relatedContainerWidth);
         }
-        
-        // Position immediately to the left of the main editor's scrollbar.
-        this.$relatedContainer.css("right", rightOffset + "px");
-        
-        // TODO: rename this method to "_updateLayout"
-        
-        // Set the width of the nested editor to fit to the left of the related container. We want the nested editor 
-        // to handle its own scrolling.
-        var relatedContainerOuterWidth = this.$relatedContainer.outerWidth();
-        this.$editorsDiv.width($(this.hostEditor.getRootElement()).width() - relatedContainerOuterWidth);
     };
     
     /**
