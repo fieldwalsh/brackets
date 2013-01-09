@@ -120,14 +120,16 @@ define(function (require, exports, module) {
 
         // Bind event handlers
         this._updateRelatedContainer = this._updateRelatedContainer.bind(this);
-        this._updateScrollFromHost = this._updateScrollFromHost.bind(this);
-        this._updateScrollFromInline = this._updateScrollFromInline.bind(this);
-        this._ensureCursorVisible = this._ensureCursorVisible.bind(this);
         this._handleChange = this._handleChange.bind(this);
         this._onClick = this._onClick.bind(this);
 
         // Create DOM to hold editors and related list
         this.$editorsDiv = $(window.document.createElement("div")).addClass("inlineEditorHolder");
+        
+        // Prevent touch scroll events from bubbling up to the parent editor.
+        this.$editorsDiv.on("mousewheel", function (e) {
+            e.stopPropagation();
+        });
         
         // Outer container for border-left and scrolling
         this.$relatedContainer = $(window.document.createElement("div")).addClass("related-container");
@@ -184,9 +186,6 @@ define(function (require, exports, module) {
         // editor, not general document changes.
         $(this.hostEditor).on("change", this._updateRelatedContainer);
         
-        // Horizontal scrolling in the host editor should synchronize with the inline editor.
-        $(this.hostEditor).on("scroll", this._updateScrollFromHost);
-        
         // Update relatedContainer when this widget's position changes
         $(this).on("offsetTopChanged", this._updateRelatedContainer);
         
@@ -225,7 +224,6 @@ define(function (require, exports, module) {
 
         // Remove previous editors
         $(this.editors[0]).off("change", this._updateRelatedContainer);
-        $(this.editors[0]).off("scroll", this._updateScrollFromInline);
 
         this.editors.forEach(function (editor) {
             editor.destroy(); //release ref on Document
@@ -244,14 +242,7 @@ define(function (require, exports, module) {
         // but in this case we're specifically concerned with changes in the given
         // editor, not general document changes.
         $(this.editors[0]).on("change", this._handleChange);
-        
-        // Synchronize horizontal scrolling between the inline editor and the host editor.
-        $(this.editors[0]).on("scroll", this._updateScrollFromInline);
-        
-        // Cursor activity in the inline editor may cause us to horizontally scroll.
-        $(this.editors[0]).on("cursorActivity", this._ensureCursorVisible);
-
-        
+                
         this.editors[0].refresh();
         
         // ensureVisibility is set to false because we don't want to scroll the main editor when the user selects a view
@@ -259,18 +250,6 @@ define(function (require, exports, module) {
         this._updateRelatedContainer();
 
         this._updateSelectedMarker();
-    };
-    
-    MultiRangeInlineEditor.prototype._updateScrollFromHost = function () {
-        var hostScrollPos = this.hostEditor.getScrollPos(),
-            inlineScrollPos = this.editors[0].getScrollPos();
-        this.editors[0].setScrollPos(hostScrollPos.x, inlineScrollPos.y);
-    };
-
-    MultiRangeInlineEditor.prototype._updateScrollFromInline = function () {
-        var hostScrollPos = this.hostEditor.getScrollPos(),
-            inlineScrollPos = this.editors[0].getScrollPos();
-        this.hostEditor.setScrollPos(inlineScrollPos.x, hostScrollPos.y);
     };
 
     MultiRangeInlineEditor.prototype._removeRange = function (range) {
@@ -346,13 +325,8 @@ define(function (require, exports, module) {
         // remove resize handlers for relatedContainer
         $(this.hostEditor).off("change", this._updateRelatedContainer);
         $(this.editors[0]).off("change", this._handleChange);
-        $(this.editors[0]).off("cursorActivity", this._ensureCursorVisible);
         $(this).off("offsetTopChanged", this._updateRelatedContainer);
         $(window).off("resize", this._updateRelatedContainer);
-        
-        // clean up other handlers
-        $(this.hostEditor).off("scroll", this._updateScrollFromHost);
-        $(this.editors[0]).off("scroll", this._updateScrollFromInline);
         
         // de-ref all the Documents in the search results
         this._ranges.forEach(function (searchResult) {
@@ -448,49 +422,6 @@ define(function (require, exports, module) {
         // to handle its own scrolling.
         var relatedContainerOuterWidth = this.$relatedContainer.outerWidth();
         this.$editorsDiv.width($(this.hostEditor.getRootElement()).width() - relatedContainerOuterWidth);
-
-        // Set the min-width of the overall widget to the total available width of the nested editor plus the width 
-        // of the related container. This forces the scrollbar of the host editor to take the nested editor's width
-        // into account if the latter is wider.
-        // (We don't want to set the actual width because we want the background to extend all the way to 
-        // the edge of the host editor even if the inline editor's content is shorter.)
-        // This is a bit of a hack since it relies on knowing that CodeMirror sets the min-width of the sizer element
-        // to the width of the max-length line in the document, and that it pads this by 30 pixels in order to hide
-        // outer scrollbars.
-        // TODO: file a request with Marijn to see if we can just get the max line width directly
-        var $sizer = $(".CodeMirror-sizer", this.editors[0].getScrollerElement()),
-            sizerMinWidth = parseInt($sizer.css("min-width"), 10) - 30, // magic constant that CM uses to hide scrollbars
-            sizerLeftOffset = $sizer.offset().left - this.$htmlContent.offset().left;
-        this.$htmlContent.css("min-width", sizerMinWidth + sizerLeftOffset + relatedContainerOuterWidth + "px");
-    };
-    
-    /**
-     * Based on the position of the cursor in the inline editor, determine whether we need to change the
-     * scroll position of the host editor to ensure that the cursor is visible.
-     */
-    MultiRangeInlineEditor.prototype._ensureCursorVisible = function () {
-        if ($.contains(this.editors[0].getRootElement(), window.document.activeElement)) {
-            var cursorCoords = this.editors[0]._codeMirror.cursorCoords(),
-                inlineLineSpaceOffset = $(this.editors[0]._getLineSpaceElement()).offset(),
-                rangeListOffset = this.$relatedContainer.offset();
-            // If we're off the left-hand side, we just want to scroll it into view normally. But
-            // if we're underneath the range list on the right, we want to ask the host editor to 
-            // scroll far enough that the current cursor position is visible to the left of the range 
-            // list. (Because we always add extra padding for the range list, this is always possible.)
-            if (cursorCoords.left >= rangeListOffset.left) {
-                cursorCoords.left += this.$relatedContainer.outerWidth();
-            }
-            
-            // Vertically, we want to set the scroll position relative to the overall host editor, not
-            // the lineSpace of the widget itself.
-            var scrollerTop = this.hostEditor.getVirtualScrollAreaTop();
-            this.hostEditor._codeMirror.scrollIntoView({
-                left: cursorCoords.left - inlineLineSpaceOffset.left,
-                top: cursorCoords.top - scrollerTop,
-                right: cursorCoords.left - inlineLineSpaceOffset.left,
-                bottom: cursorCoords.bottom - scrollerTop
-            });
-        }
     };
     
     /**
